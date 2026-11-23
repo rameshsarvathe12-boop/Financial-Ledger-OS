@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 
 def compare_records(
@@ -7,36 +7,25 @@ def compare_records(
     b_entries: List[Dict[str, Any]],
     location_org_map: Dict[str, str],
     tenant_org: Optional[str] = None,
+    all_system_a_ids: Optional[Set[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Pure Python reconciliation engine comparing System A records with System B entries.
     
     Arguments:
-        a_records: dict of record_id -> {
-            'record_id': str,
-            'location_id': str,
-            'event_date': str or date,
-            'total_value': Decimal,
-            'state': str ('CONFIRMED' | 'VOIDED'),
-            'category_code': str,
-            'actor_id': Optional[str],
-        }
-        b_entries: list of dicts:
-            'entry_id': str,
-            'record_ref': str (normalized, e.g. 'REC-1034'),
-            'record_ref_raw': str,
-            'location_id': str,
-            'recorded_on': str or date,
-            'value': Optional[Decimal],
-            'value_raw': str,
-            'label': str,
-        location_org_map: dict of location_id -> org_id (e.g. {'LOC-101': 'ORG-A', ...})
-        tenant_org: optional tenant string ('ORG-A' | 'ORG-B'). When provided, filters
-                    and protects cross-tenant data.
+        a_records: dict of record_id -> record details for current tenant
+        b_entries: list of entry dicts for current tenant
+        location_org_map: dict of location_id -> org_id
+        tenant_org: optional tenant string ('ORG-A' | 'ORG-B')
+        all_system_a_ids: set of all record_ids existing in System A globally across tenants.
+                          Used to distinguish true orphans from cross-tenant misallocations.
 
     Returns:
         List of disagreement dicts.
     """
+    if all_system_a_ids is None:
+        all_system_a_ids = set(a_records.keys())
+
     # Group System B entries by cleaned record_ref
     by_ref: Dict[str, List[Dict[str, Any]]] = {}
     for entry in b_entries:
@@ -46,14 +35,14 @@ def compare_records(
 
     disagreements: List[Dict[str, Any]] = []
 
-    # 1. ORPHAN_IN_B: B entries referencing record_ids not present in System A
+    # 1. ORPHAN_IN_B: B entries referencing record_ids not present anywhere in System A
     for ref, entries in by_ref.items():
-        if ref not in a_records:
+        if ref not in all_system_a_ids:
             for e in entries:
                 e_loc = e["location_id"]
                 e_org = location_org_map.get(e_loc, "UNKNOWN")
                 
-                # Tenant isolation filter
+                # Tenant isolation filter: true orphans belong to the tenant owning B's location
                 if tenant_org and e_org != tenant_org:
                     continue
 
@@ -74,7 +63,7 @@ def compare_records(
                     "details": f"System B entry {e['entry_id']} references non-existent record {ref} in System A",
                 })
 
-    # 2. Walk through all System A records
+    # 2. Walk through all System A records for this tenant
     for rid, a in a_records.items():
         a_loc = a["location_id"]
         a_org = location_org_map.get(a_loc, "UNKNOWN")
