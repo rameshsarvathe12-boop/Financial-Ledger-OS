@@ -1,6 +1,7 @@
 import csv
 import logging
 import re
+from datetime import datetime, date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from django.db import transaction
@@ -37,6 +38,23 @@ def parse_amount(raw: str) -> Decimal | None:
         return None
 
 
+def parse_date(raw: str) -> date | None:
+    """
+    Parses date strings robustly, supporting ISO (%Y-%m-%d) as well as %d-%m-%Y,
+    %m-%d-%Y, %Y/%m/%d, %d/%m/%Y formats.
+    """
+    if not raw:
+        return None
+    s = str(raw).strip()
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m-%d-%Y", "%Y/%m/%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    logger.warning(f"Could not parse date: '{raw}'")
+    return None
+
+
 def import_locations(file_path: Path):
     """Imports locations from CSV (idempotent)."""
     saved = 0
@@ -71,7 +89,8 @@ def import_system_a(file_path: Path):
             clean_row = {k: (v.strip() if v else "") for k, v in row.items()}
             rec_id = clean_row.get("record_id")
             loc_id = clean_row.get("location_id")
-            event_date = clean_row.get("event_date")
+            raw_date = clean_row.get("event_date")
+            event_date = parse_date(raw_date)
             cat = clean_row.get("category_code")
             actor = clean_row.get("actor_id") or None
             if not actor:
@@ -124,7 +143,8 @@ def import_system_b(file_path: Path):
                 cleaned_refs_count += 1
 
             loc_id = clean_row.get("location_id")
-            rec_on = clean_row.get("recorded_on")
+            raw_rec_on = clean_row.get("recorded_on")
+            rec_on = parse_date(raw_rec_on)
             raw_val = clean_row.get("value", "")
             parsed_val = parse_amount(raw_val)
             if parsed_val is None:
