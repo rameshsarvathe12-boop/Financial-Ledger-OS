@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import './App.css'
 
 const API_BASE = '/api'
@@ -8,49 +8,42 @@ const REASON_CONFIG = {
     label: 'Value Mismatch',
     badgeClass: 'badge-value-mismatch',
     icon: '⚡',
-    color: '#d97706',
     desc: 'System B value differs from System A total',
   },
   MISSING_IN_B: {
     label: 'Missing in System B',
     badgeClass: 'badge-missing',
     icon: '🚫',
-    color: '#dc2626',
     desc: 'Record in System A with no counterpart in B',
   },
   ORPHAN_IN_B: {
     label: 'Orphan in System B',
     badgeClass: 'badge-orphan',
     icon: '👻',
-    color: '#6366f1',
     desc: 'System B entry references non-existent A record',
   },
   DUPLICATE_IN_B: {
     label: 'Duplicate in System B',
     badgeClass: 'badge-duplicate',
     icon: '📑',
-    color: '#ea580c',
     desc: 'Multiple entries in B not summing to total',
   },
   LOCATION_MISMATCH: {
     label: 'Location Mismatch',
     badgeClass: 'badge-location',
     icon: '📍',
-    color: '#8b5cf6',
     desc: 'Branch code discrepancy between ledgers',
   },
   DATE_MISMATCH: {
     label: 'Date Mismatch',
     badgeClass: 'badge-date',
     icon: '📅',
-    color: '#0284c7',
     desc: 'Event date differs from recorded date',
   },
   VOIDED_RECORD_HAS_ENTRY: {
     label: 'Voided with Entry',
     badgeClass: 'badge-voided',
     icon: '⚠️',
-    color: '#475569',
     desc: 'Voided transaction with active B entry',
   },
 }
@@ -92,22 +85,18 @@ export default function App() {
   const [copiedId, setCopiedId] = useState(null)
   const [toastMessage, setToastMessage] = useState(null)
 
-  const [data, setData] = useState({
-    org: 'ORG-A',
-    total_count: 0,
-    reason_summary: {},
-    results: [],
-  })
+  // Store raw API results per organization to enable instant, zero-latency interactions
+  const [tenantCache, setTenantCache] = useState({})
   const [loading, setLoading] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState(null)
 
-  // Show temporary toast feedback
-  const showToast = (msg) => {
+  const showToast = useCallback((msg) => {
     setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 3000)
-  }
+    setTimeout(() => setToastMessage(null), 2500)
+  }, [])
 
-  // Fetch available orgs on mount
+  // Fetch available orgs once on mount
   useEffect(() => {
     fetch(`${API_BASE}/orgs/`)
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch orgs')))
@@ -125,23 +114,18 @@ export default function App() {
       })
   }, [])
 
-  // Fetch disagreements
-  const loadData = () => {
-    if (!selectedOrg) return
+  // Fetch all disagreements for an organization
+  const fetchTenantData = useCallback((org, isManualRefresh = false) => {
+    if (!org) return
 
-    setLoading(true)
+    if (isManualRefresh) {
+      setIsRefreshing(true)
+    } else {
+      setLoading(true)
+    }
     setError(null)
 
-    const sortParam = `${sortDirection === 'desc' ? '-' : ''}${sortField}`
-    const params = new URLSearchParams({
-      org: selectedOrg,
-      sort: sortParam,
-    })
-    if (selectedReason) {
-      params.append('reason', selectedReason)
-    }
-
-    fetch(`${API_BASE}/disagreements/?${params.toString()}`)
+    fetch(`${API_BASE}/disagreements/?org=${encodeURIComponent(org)}&sort=-value`)
       .then((res) => {
         if (!res.ok) {
           return res.json().then((d) => Promise.reject(d.error || 'Server error'))
@@ -149,19 +133,87 @@ export default function App() {
         return res.json()
       })
       .then((resData) => {
-        setData(resData)
+        setTenantCache((prev) => ({
+          ...prev,
+          [org]: resData,
+        }))
         setLoading(false)
+        setIsRefreshing(false)
+        if (isManualRefresh) {
+          showToast(`Refreshed data for ${org}`)
+        }
       })
       .catch((err) => {
         console.error('Fetch error:', err)
         setError(typeof err === 'string' ? err : 'Unable to connect to reconciliation API')
         setLoading(false)
+        setIsRefreshing(false)
       })
+  }, [showToast])
+
+  // Fetch when tenant changes
+  useEffect(() => {
+    if (!tenantCache[selectedOrg]) {
+      fetchTenantData(selectedOrg, false)
+    }
+  }, [selectedOrg, tenantCache, fetchTenantData])
+
+  const currentOrgData = tenantCache[selectedOrg] || {
+    org: selectedOrg,
+    total_count: 0,
+    reason_summary: {},
+    results: [],
   }
 
-  useEffect(() => {
-    loadData()
-  }, [selectedOrg, selectedReason, sortField, sortDirection])
+  // Instant in-memory filter, search, and sort (0ms latency, zero page flicker!)
+  const filteredAndSortedResults = useMemo(() => {
+    let items = currentOrgData.results ? [...currentOrgData.results] : []
+
+    // 1. Reason Filter
+    if (selectedReason) {
+      items = items.filter((item) => item.reason === selectedReason)
+    }
+
+    // 2. Search Query
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim()
+      items = items.filter(
+        (item) =>
+          (item.record_id && item.record_id.toLowerCase().includes(q)) ||
+          (item.entry_id && item.entry_id.toLowerCase().includes(q)) ||
+          (item.location_id && item.location_id.toLowerCase().includes(q)) ||
+          (item.details && item.details.toLowerCase().includes(q))
+      )
+    }
+
+    // 3. Sort Order
+    items.sort((a, b) => {
+      let valA, valB
+
+      if (sortField === 'value') {
+        valA = Math.abs(parseFloat(a.b_value ?? a.a_value ?? 0))
+        valB = Math.abs(parseFloat(b.b_value ?? b.a_value ?? 0))
+      } else if (sortField === 'difference') {
+        valA = a.difference !== null && a.difference !== undefined ? Math.abs(parseFloat(a.difference)) : -1
+        valB = b.difference !== null && b.difference !== undefined ? Math.abs(parseFloat(b.difference)) : -1
+      } else if (sortField === 'record_id') {
+        valA = a.record_id || ''
+        valB = b.record_id || ''
+      } else if (sortField === 'reason') {
+        valA = a.reason || ''
+        valB = b.reason || ''
+      } else {
+        valA = a.record_id || ''
+        valB = b.record_id || ''
+      }
+
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1
+      return 0
+    })
+
+    return items
+  }, [currentOrgData.results, selectedReason, searchTerm, sortField, sortDirection])
 
   const handleHeaderSort = (field) => {
     if (sortField === field) {
@@ -172,18 +224,16 @@ export default function App() {
     }
   }
 
-  // Copy Record ID helper
   const copyToClipboard = (text, e) => {
     e.stopPropagation()
     navigator.clipboard.writeText(text)
     setCopiedId(text)
     showToast(`Copied ${text} to clipboard!`)
-    setTimeout(() => setCopiedId(null), 2000)
+    setTimeout(() => setCopiedId(null), 1800)
   }
 
-  // Export current table view to CSV
   const exportToCSV = () => {
-    if (!filteredResults.length) return
+    if (!filteredAndSortedResults.length) return
     const headers = [
       'Reason',
       'Record ID',
@@ -194,7 +244,7 @@ export default function App() {
       'Difference',
       'Details',
     ]
-    const rows = filteredResults.map((r) => [
+    const rows = filteredAndSortedResults.map((r) => [
       `"${r.reason}"`,
       `"${r.record_id || ''}"`,
       `"${r.entry_id || ''}"`,
@@ -216,32 +266,17 @@ export default function App() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    showToast(`Exported ${filteredResults.length} records to CSV`)
+    showToast(`Exported ${filteredAndSortedResults.length} records to CSV`)
   }
 
-  // Client-side search filtering
-  const filteredResults = useMemo(() => {
-    if (!data.results) return []
-    if (!searchTerm.trim()) return data.results
-
-    const q = searchTerm.toLowerCase().trim()
-    return data.results.filter(
-      (item) =>
-        (item.record_id && item.record_id.toLowerCase().includes(q)) ||
-        (item.entry_id && item.entry_id.toLowerCase().includes(q)) ||
-        (item.location_id && item.location_id.toLowerCase().includes(q)) ||
-        (item.details && item.details.toLowerCase().includes(q))
-    )
-  }, [data.results, searchTerm])
-
-  const totalDiscrepancies = Object.values(data.reason_summary || {}).reduce(
+  const totalDiscrepancies = Object.values(currentOrgData.reason_summary || {}).reduce(
     (a, b) => a + b,
     0
   )
 
   return (
     <div className="app-container">
-      {/* Toast Notification */}
+      {/* Toast Feedback Banner */}
       {toastMessage && (
         <div className="toast-banner">
           <span>✨ {toastMessage}</span>
@@ -263,7 +298,7 @@ export default function App() {
 
         {/* Interactive Tenant Switcher */}
         <div className="tenant-switcher-card">
-          <span className="tenant-switcher-label">Active Organization:</span>
+          <span className="tenant-switcher-label">Organization:</span>
           <div className="segmented-control">
             {orgsList.map((org) => {
               const isActive = selectedOrg === org
@@ -277,11 +312,9 @@ export default function App() {
                       setSelectedOrg(org)
                       setSelectedReason('')
                       setExpandedRow(null)
-                      showToast(`Switched workspace to ${org}`)
                     }
                   }}
                 >
-                  <span className="segment-indicator"></span>
                   <span className="segment-text">{org}</span>
                   {isActive && <span className="active-dot"></span>}
                 </button>
@@ -291,7 +324,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Tenant Boundary Safety Banner */}
+      {/* Tenant Boundary Notice */}
       <div className="tenant-notice-banner">
         <div className="notice-left">
           <span className="shield-icon">🛡️</span>
@@ -309,7 +342,7 @@ export default function App() {
 
       {/* Interactive Metric Cards Grid */}
       <section className="metrics-section">
-        <div className="section-label">Discrepancy Overview by Reason (Click to filter):</div>
+        <div className="section-label">Filter by Discrepancy Reason (Instant 0ms Filter):</div>
         <div className="metrics-grid">
           {/* Total Card */}
           <button
@@ -323,16 +356,15 @@ export default function App() {
             </div>
             <div className="metric-value">{totalDiscrepancies}</div>
             <div className="metric-footer">
-              <span>{selectedReason === '' ? 'Currently viewing all' : 'Click to view all'}</span>
+              <span>{selectedReason === '' ? '✓ Showing all' : 'Click to view all'}</span>
             </div>
           </button>
 
           {/* Individual Category Cards */}
-          {Object.entries(data.reason_summary || {}).map(([reason, count]) => {
+          {Object.entries(currentOrgData.reason_summary || {}).map(([reason, count]) => {
             const cfg = REASON_CONFIG[reason] || {
               label: reason,
               icon: '📌',
-              color: '#3b82f6',
             }
             const isSelected = selectedReason === reason
 
@@ -362,7 +394,7 @@ export default function App() {
         <div className="controls-left">
           {/* Reason Select Dropdown */}
           <div className="control-field">
-            <label htmlFor="reason-filter">Filter Reason:</label>
+            <label htmlFor="reason-filter">Reason:</label>
             <div className="select-wrapper">
               <select
                 id="reason-filter"
@@ -384,7 +416,7 @@ export default function App() {
 
           {/* Sort Order Select */}
           <div className="control-field">
-            <label htmlFor="sort-select">Sort Order:</label>
+            <label htmlFor="sort-select">Sort By:</label>
             <div className="select-wrapper">
               <select
                 id="sort-select"
@@ -415,7 +447,7 @@ export default function App() {
             <input
               type="text"
               className="search-input"
-              placeholder="Search ID, location, details..."
+              placeholder="Filter by ID, branch, note..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -435,19 +467,19 @@ export default function App() {
             <button
               type="button"
               className="action-btn btn-secondary"
-              onClick={loadData}
-              disabled={loading}
-              title="Refresh ledger data"
+              onClick={() => fetchTenantData(selectedOrg, true)}
+              disabled={isRefreshing || loading}
+              title="Refresh ledger data from database"
             >
-              <span className={`btn-icon ${loading ? 'spinning' : ''}`}>🔄</span>
-              <span>Refresh</span>
+              <span className={`btn-icon ${isRefreshing ? 'spinning' : ''}`}>🔄</span>
+              <span>{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
             </button>
 
             <button
               type="button"
               className="action-btn btn-primary"
               onClick={exportToCSV}
-              disabled={loading || filteredResults.length === 0}
+              disabled={filteredAndSortedResults.length === 0}
               title="Export current discrepancies to CSV"
             >
               <span className="btn-icon">📥</span>
@@ -459,24 +491,28 @@ export default function App() {
 
       {/* Main Reconciliation Table */}
       <div className="table-card">
-        {loading ? (
+        {loading && !tenantCache[selectedOrg] ? (
           <div className="state-container">
             <div className="spinner-loader"></div>
-            <div className="state-title">Reconciling Ledgers...</div>
+            <div className="state-title">Loading {selectedOrg} Discrepancies...</div>
             <div className="state-desc">
-              Analyzing transactions across System A and System B for {selectedOrg}
+              Reconciling transactions across System A and System B
             </div>
           </div>
-        ) : error ? (
+        ) : error && !tenantCache[selectedOrg] ? (
           <div className="state-container state-error">
             <div className="state-icon">⚠️</div>
             <div className="state-title">Connection Error</div>
             <div className="state-desc">{error}</div>
-            <button type="button" className="action-btn btn-primary" onClick={loadData}>
+            <button
+              type="button"
+              className="action-btn btn-primary"
+              onClick={() => fetchTenantData(selectedOrg, false)}
+            >
               Try Again
             </button>
           </div>
-        ) : filteredResults.length === 0 ? (
+        ) : filteredAndSortedResults.length === 0 ? (
           <div className="state-container">
             <div className="state-icon">🎉</div>
             <div className="state-title">No Disagreements Found</div>
@@ -504,7 +540,7 @@ export default function App() {
                   <th
                     className="sortable"
                     onClick={() => handleHeaderSort('reason')}
-                    title="Sort by Reason"
+                    title="Click to sort by Reason"
                   >
                     <div className="th-content">
                       <span>Reason</span>
@@ -517,7 +553,7 @@ export default function App() {
                   <th
                     className="sortable"
                     onClick={() => handleHeaderSort('record_id')}
-                    title="Sort by Record ID"
+                    title="Click to sort by Record ID"
                   >
                     <div className="th-content">
                       <span>Record ID</span>
@@ -533,7 +569,7 @@ export default function App() {
                   <th
                     className="sortable text-right"
                     onClick={() => handleHeaderSort('value')}
-                    title="Sort by Value"
+                    title="Click to sort by Value"
                   >
                     <div className="th-content justify-end">
                       <span>System A Total</span>
@@ -546,7 +582,7 @@ export default function App() {
                   <th
                     className="sortable text-right"
                     onClick={() => handleHeaderSort('value')}
-                    title="Sort by Value"
+                    title="Click to sort by Value"
                   >
                     <div className="th-content justify-end">
                       <span>System B Value</span>
@@ -559,7 +595,7 @@ export default function App() {
                   <th
                     className="sortable text-right"
                     onClick={() => handleHeaderSort('difference')}
-                    title="Sort by Difference"
+                    title="Click to sort by Difference"
                   >
                     <div className="th-content justify-end">
                       <span>Difference</span>
@@ -573,7 +609,7 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {filteredResults.map((row, idx) => {
+                {filteredAndSortedResults.map((row, idx) => {
                   const aFmt = formatCurrency(row.a_value)
                   const bFmt = formatCurrency(row.b_value)
                   const diffNum =
@@ -763,7 +799,7 @@ export default function App() {
           DealerOS Ledger Platform &bull; Built with Django REST Framework & Vite + React
         </div>
         <div>
-          Showing <strong>{filteredResults.length}</strong> of{' '}
+          Showing <strong>{filteredAndSortedResults.length}</strong> of{' '}
           <strong>{totalDiscrepancies}</strong> total discrepancies
         </div>
       </footer>

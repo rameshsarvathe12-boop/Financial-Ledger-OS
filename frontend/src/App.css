@@ -1,5 +1,5 @@
 /* ==========================================================================
-   DealerOS Dual-Ledger Reconciliation — Theme & Component Styles
+   DealerOS Dual-Ledger Reconciliation — Theme & High Performance Styles
    ========================================================================== */
 
 :root {
@@ -33,9 +33,6 @@
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-full: 9999px;
-
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .app-container {
@@ -61,13 +58,14 @@
   align-items: center;
   gap: 10px;
   z-index: 1000;
-  animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   border: 1px solid rgba(255, 255, 255, 0.15);
+  pointer-events: none;
 }
 
 @keyframes slideInUp {
   from {
-    transform: translateY(20px);
+    transform: translateY(16px);
     opacity: 0;
   }
   to {
@@ -81,7 +79,7 @@
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-lg);
-  padding: 24px 28px;
+  padding: 22px 26px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -98,18 +96,19 @@
 }
 
 .brand-logo-container {
-  width: 52px;
-  height: 52px;
+  width: 50px;
+  height: 50px;
   background: linear-gradient(135deg, var(--primary-600) 0%, #312e81 100%);
-  border-radius: 14px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+  flex-shrink: 0;
 }
 
 .brand-icon {
-  font-size: 26px;
+  font-size: 24px;
 }
 
 .brand-badge {
@@ -146,8 +145,8 @@
   align-items: center;
   gap: 12px;
   background: var(--slate-100);
-  padding: 6px 8px;
-  border-radius: 12px;
+  padding: 5px 6px;
+  border-radius: 10px;
   border: 1px solid var(--slate-200);
 }
 
@@ -165,7 +164,6 @@
   background: #ffffff;
   padding: 3px;
   border-radius: 8px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
   border: 1px solid var(--slate-200);
 }
 
@@ -181,8 +179,7 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: all var(--transition-normal);
-  position: relative;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   outline: none;
 }
 
@@ -193,7 +190,7 @@
 .segment-btn.active {
   background: var(--primary-600);
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
 }
 
 .active-dot {
@@ -257,20 +254,6 @@
   height: 8px;
   background: var(--emerald-500);
   border-radius: 50%;
-  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-  animation: pulseGreen 2s infinite;
-}
-
-@keyframes pulseGreen {
-  0% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-  }
 }
 
 /* Metrics Section */
@@ -293,7 +276,7 @@
   gap: 12px;
 }
 
-/* Interactive Metric Card */
+/* Interactive Metric Card (Hardware Accelerated) */
 .metric-card {
   background: #ffffff;
   border: 1px solid var(--slate-200);
@@ -301,30 +284,30 @@
   padding: 16px;
   text-align: left;
   cursor: pointer;
-  transition: all var(--transition-normal);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   box-shadow: var(--shadow-sm);
   outline: none;
   position: relative;
-  overflow: hidden;
+  will-change: transform;
 }
 
 .metric-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: var(--primary-500);
   box-shadow: var(--shadow-md);
 }
 
 .metric-card:active {
-  transform: translateY(-1px);
+  transform: translateY(0);
 }
 
 .metric-card.active {
   border-color: var(--primary-600);
   background: linear-gradient(to bottom, #ffffff, var(--primary-50));
-  box-shadow: 0 0 0 2px var(--primary-500), var(--shadow-md);
+  box-shadow: 0 0 0 2px var(--primary-500), var(--shadow-sm);
 }
 
 .metric-header {
@@ -370,7 +353,7 @@
   background: #ffffff;
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-md);
-  padding: 16px 20px;
+  padding: 14px 18px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -414,7 +397,7 @@
   font-weight: 500;
   color: var(--slate-800);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   outline: none;
 }
 
@@ -447,14 +430,13 @@
   border: 1px solid var(--slate-300);
   font-size: 13px;
   color: var(--slate-800);
-  width: 240px;
+  width: 220px;
   outline: none;
-  transition: all var(--transition-fast);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .search-input:focus {
   border-color: var(--primary-600);
-  width: 270px;
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
@@ -484,7 +466,7 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-normal);
+  transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
   border: 1px solid transparent;
   outline: none;
   white-space: nowrap;
@@ -524,7 +506,7 @@
 
 .btn-icon.spinning {
   display: inline-block;
-  animation: spin 1s infinite linear;
+  animation: spin 0.8s infinite linear;
 }
 
 @keyframes spin {
@@ -569,7 +551,7 @@
 
 .reconcile-table th.sortable {
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .reconcile-table th.sortable:hover {
@@ -594,7 +576,7 @@
 
 .table-row {
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color 0.1s ease;
   border-bottom: 1px solid var(--slate-200);
 }
 
@@ -691,7 +673,7 @@
   padding: 2px 4px;
   border-radius: 4px;
   opacity: 0.5;
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .copy-btn:hover {
@@ -817,15 +799,6 @@
   border-bottom: 2px solid var(--primary-100);
 }
 
-.drawer-content {
-  animation: fadeIn 0.2s ease-in-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 .drawer-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -916,9 +889,6 @@
     align-items: flex-start;
   }
   .search-input {
-    width: 100%;
-  }
-  .search-input:focus {
     width: 100%;
   }
 }
