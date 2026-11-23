@@ -38,7 +38,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'corsheaders',
     'reconcile',
     
 ]
@@ -109,9 +108,19 @@ STATIC_URL = 'static/'
 
 # CORS configuration
 CORS_ALLOWED_ORIGINS = [
-    "https://YOUR-FRONTEND-DOMAIN",
+   "https://financial-ledger-os.vercel.app",
 ]
-
+CSRF_TRUSTED_ORIGINS = [
+    "https://financial-ledger-os.vercel.app",
+]
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+]
 # REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
@@ -119,3 +128,4 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.BrowsableAPIRenderer',
     ],
 }
+
