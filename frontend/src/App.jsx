@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import './App.css'
 
-const API_BASE = '/api'
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL ||
+  'https://financial-ledger-os-1.onrender.com/api'
+).replace(/\/$/, '')
 
 const REASON_CONFIG = {
   VALUE_MISMATCH: {

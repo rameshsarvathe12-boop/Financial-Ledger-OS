@@ -1,22 +1,36 @@
 """
 Django settings for config project.
 """
-
+import os
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+# ==========================================
+# PRODUCTION SECURITY SETTINGS
+# ==========================================
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&lttwy!rj)mtulelu*w7-76nob2wj*a_qcs5#*1v&bo)j12z6+'
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "SECRET_KEY environment variable is missing!"
+    )
+
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+
+ALLOWED_HOSTS = [
+    "financial-ledger-os-1.onrender.com",
+    "localhost",
+    "127.0.0.1",
+]
 
 ALLOWED_HOSTS = ['*']
 
 # Application definition
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -26,6 +40,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'reconcile',
+    
 ]
 
 MIDDLEWARE = [
@@ -93,8 +108,9 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 # CORS configuration
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://YOUR-FRONTEND-DOMAIN",
+]
 
 # REST Framework settings
 REST_FRAMEWORK = {
